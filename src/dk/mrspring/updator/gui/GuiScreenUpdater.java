@@ -255,7 +255,7 @@ public class GuiScreenUpdater extends GuiScreen
     private class DropDown
     {
         Entry[] entries;
-        Entry selected;
+        int selected;
         boolean expanded = false;
 
         boolean needsScroll = false;
@@ -268,7 +268,7 @@ public class GuiScreenUpdater extends GuiScreen
         public DropDown(Entry... entries)
         {
             this.entries = entries;
-            selected = entries[0];
+            selected = 0;
         }
 
         public DropDown(UpdatingMod mod)
@@ -278,7 +278,7 @@ public class GuiScreenUpdater extends GuiScreen
             entries = new Entry[versionIds.length];
             for (int i = 0; i < versionIds.length; i++)
                 entries[i] = new Entry(versionIds[i], display[i]);
-            selected = entries[0];
+            selected = 0;
         }
 
         public void mouseDown(int mouseX, int mouseY, int mouseButton)
@@ -300,7 +300,7 @@ public class GuiScreenUpdater extends GuiScreen
                 System.out.println("Clicked");
                 if (expanded)
                 {
-                    selected = entries[hovering];
+                    selected = hovering;
                     System.out.println(hovering);
                     expanded = false;
                 } else expanded = true;
@@ -342,43 +342,42 @@ public class GuiScreenUpdater extends GuiScreen
             hovering = -1;
             int listIndex = scrollOffset, renderIndex = 0;
             topHover = bottomHover = false;
-            while (listIndex < entries.length)
-            {
-                Entry entry = entries[listIndex];
-                int tY = yOffset - (fR.FONT_HEIGHT / 2);
-                boolean nextExceedsHeight = (yOffset + (2 * (1.5 * fR.FONT_HEIGHT))) > bBottom;
-                boolean hover = isMouseInBounds(mouseX, mouseY, x, x + width, tY, tY + (2 * fR.FONT_HEIGHT));
-//                drawRect(x, x + width, tY, tY + (2 * fR.FONT_HEIGHT), color);
-                if (hover) hovering = listIndex;
-                boolean centerText = false;
-                String text = entry.name;
-                if ((renderIndex == 0 && listIndex > 0) || (nextExceedsHeight && listIndex != entries.length - 1))
+            if (expanded)
+                while (listIndex < entries.length)
                 {
-                    centerText = false;
-                    text="More...";
-                }
-                drawEntry(x,tY,width,hover,centerText,text);
-//                if (renderIndex == 0 && listIndex > 0)
-//                {
-//                    drawCenteredSplitString("More...", x + (width / 2), yOffset, width, 0xFFFFFF, true);
-//                    if (hover) this.topHover = true;
-//                } else if (nextExceedsHeight && listIndex != entries.length - 1)
-//                {
-//                    drawCenteredSplitString("More...", x + (width / 2), yOffset, width, 0xFFFFFF, true);
-//                    if (hover) this.bottomHover = true;
-//                } else fR.drawString(entry.name, x + (fR.FONT_HEIGHT / 2), yOffset, 0xFFFFFF, true);
-
+                    Entry entry = entries[listIndex];
+                    int tY = yOffset - (fR.FONT_HEIGHT / 2);
+                    boolean nextExceedsHeight = (yOffset + (2 * (1.5 * fR.FONT_HEIGHT))) > bBottom;
+                    boolean hover = isMouseInBounds(mouseX, mouseY, x, x + width, tY, tY + (2 * fR.FONT_HEIGHT));
+                    if (hover) hovering = listIndex;
+                    boolean centerText = false;
+                    String text = entry.name;
+                    if ((renderIndex == 0 && listIndex > 0) || (nextExceedsHeight && listIndex != entries.length - 1))
+                    {
+                        if (hover) bottomHover = !(topHover = renderIndex == 0);
+                        centerText = true;
+                        text = "More...";
+                    }
+                    drawEntry(x, tY, width, hover, centerText, text);
                     yOffset += (2 * fR.FONT_HEIGHT);
 
-                if (!expanded) break;
-                if (nextExceedsHeight)
-                {
-                    scrollHides = entries.length - 1 - renderIndex;
-                    break;
-                }
+                    if (!expanded) break;
+                    if (nextExceedsHeight)
+                    {
+                        scrollHides = entries.length - 1 - renderIndex;
+                        break;
+                    }
 
-                listIndex++;
-                renderIndex++;
+                    listIndex++;
+                    renderIndex++;
+                }
+            else
+            {
+                Entry drawing = entries[selected];
+                int tY = yOffset - (fR.FONT_HEIGHT / 2);
+                boolean hover = isMouseInBounds(mouseX, mouseY, x, x + width, tY, tY + (2 * fR.FONT_HEIGHT));
+                if (hover) hovering = selected;
+                drawEntry(x, tY, width, hover, false, drawing.name);
             }
 
             /*for (int i = scrollOffset, j = 0; i < entries.length; i++)
@@ -418,7 +417,7 @@ public class GuiScreenUpdater extends GuiScreen
             int tY = (mc.fontRendererObj.FONT_HEIGHT / 2);
             if (centerText)
                 drawCenteredSplitString(text, x + (width / 2), y + tY, width, 0xFFFFFF, true);
-            else mc.fontRendererObj.drawString(text, x + tY, y+tY, 0xFFFFFF, true);
+            else mc.fontRendererObj.drawString(text, x + tY, y + tY, 0xFFFFFF, true);
         }
     }
 

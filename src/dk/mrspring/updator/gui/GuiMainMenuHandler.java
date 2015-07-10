@@ -15,24 +15,25 @@ public class GuiMainMenuHandler
 {
     public static final int UPDATE_CHECKER_ID = 642;
 
-    public static String buttonListSRG = "field_146292_n";
-    public static String buttonListOBF = "n";
-    public static String buttonListMCP = "buttonList";
-
-    public static void onInitMainMenuGui(GuiMainMenu guiMainMenu)
+    public static void addUpdateButton(List<GuiButton> buttonList)
     {
-        List<GuiButton> buttonList = getButtonList(guiMainMenu);
-        if (buttonList == null)
-        {
-            return;
-        }
-        System.out.println("Adding");
         buttonList.add(new GuiButton(UPDATE_CHECKER_ID, 5, 5, "Updater"));
     }
 
-    private static List<GuiButton> getButtonList(GuiMainMenu guiMainMenu)
+    /**
+     * A helper method that automatically gets the button list.
+     * @param guiMainMenu The main menu gui object
+     * @param buttonListNames The possible names the buttonList field can have. 0 = MCP, 1 = SRG, 2 = OBF
+     */
+    public static void onInitMainMenuGui(GuiMainMenu guiMainMenu, String[] buttonListNames)
     {
-        Field buttonList = getButtonListField();
+        List<GuiButton> buttonList = getButtonList(guiMainMenu, buttonListNames);
+        if (buttonList != null) addUpdateButton(buttonList);
+    }
+
+    private static List<GuiButton> getButtonList(GuiMainMenu guiMainMenu, String[] buttonListNames)
+    {
+        Field buttonList = getButtonListField(buttonListNames);
         if (buttonList == null)
             return null;
         System.out.println("Not null");
@@ -47,17 +48,17 @@ public class GuiMainMenuHandler
         return null;
     }
 
-    private static Field getButtonListField()
+    private static Field getButtonListField(String[] buttonListNames)
     {
         Field[] fields = GuiScreen.class.getDeclaredFields();
         for (Field field : fields)
         {
             System.out.println("Trying field: " + field.getName());
-            if (field.getName().equals(buttonListMCP))
+            if (field.getName().equals(buttonListNames[0]))
                 return field;
-            else if (field.getName().equals(buttonListSRG))
+            else if (field.getName().equals(buttonListNames[1]))
                 return field;
-            else if (field.getName().equals(buttonListOBF))
+            else if (field.getName().equals(buttonListNames[2]))
                 return field;
         }
         return null;
@@ -66,10 +67,6 @@ public class GuiMainMenuHandler
     public static void onActionPerformed(GuiButton button)
     {
         if (button.id == UPDATE_CHECKER_ID)
-        {
-            System.out.println("Updater clicked!");
             Minecraft.getMinecraft().displayGuiScreen(new GuiScreenUpdater());
-        }
-        System.out.println("action performed");
     }
 }
