@@ -1,11 +1,14 @@
 package dk.mrspring.updater.gui;
 
+import dk.mrspring.updater.core.FileDownloadAction;
 import dk.mrspring.updater.core.ModUpdater;
 import dk.mrspring.updater.core.UpdatingMod;
-import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.renderer.Tessellator;
+import org.apache.commons.lang3.ArrayUtils;
 import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL11;
 
 import java.nio.DoubleBuffer;
 import java.util.ArrayList;
@@ -22,6 +25,7 @@ public class GuiScreenUpdater extends GuiScreen
     List<ListEntry> entries;
     UpdatingMod inFocus;
     DropDown versionSelector;
+    GuiButton downloadButton;
     int _listEntryHeight = 50;
     int _entryPadding = 5;
 
@@ -34,6 +38,7 @@ public class GuiScreenUpdater extends GuiScreen
         for (UpdatingMod mod : mods) entries.add(new ListEntry(mod));
         inFocus = mods.get(0);
         versionSelector = new DropDown(inFocus);
+        this.buttonList.add(downloadButton = new GuiButton(0, 0, 0, "Download"));
     }
 
     @Override
@@ -98,7 +103,27 @@ public class GuiScreenUpdater extends GuiScreen
         drawCenteredSplitString("Latest Version:\n" + inFocus.getLatest(), third * 2, 0, third, 0xFFFFFF, true);
 
         drawChangeLog(10, width - 10, 30, height - 60);
-        versionSelector.draw(10, width - 10, 30, height, 0, height - 40, false, mouseX, mouseY);
+        versionSelector.draw(10, width - 10, 30, height, mouseX, mouseY);
+        this.drawDownloadWidget(10 + versionSelector.getWidth() + 10, width - 10, height - 20, height, mouseX, mouseY);
+    }
+
+    FileDownloadAction downloadAction = null;
+
+    private void drawDownloadWidget(int bLeft, int bRight, int bTop, int bBottom, int mouseX, int mouseY)
+    {
+        if (downloadAction == null)
+        {
+//            downloadButton.enabled = true;
+//            downloadButton.xPosition = bLeft;
+//            downloadButton.yPosition = bTop;
+//            downloadButton.width = bRight - bLeft;
+//            downloadButton.height = bBottom - bTop;
+//            downloadButton.drawButton(mc, mouseX, mouseY);
+            drawRect(bLeft, bRight, bTop, bBottom, 0F, 0F, 0F, 0.5F);
+        } else if (!downloadAction.hasStarted())
+            drawCenteredString(mc.fontRenderer, "Starting download...", bLeft + (bRight - bLeft) / 2, bTop + 3, 0xFFFFFF);
+        else if (downloadAction.isDownloading())
+            drawCenteredString(mc.fontRenderer, "Downloading...", bLeft + (bRight - bLeft) / 2, bTop + 3, 0xFFFFFF);
     }
 
     private void drawChangeLog(int left, int right, int top, int bottom)
@@ -121,7 +146,7 @@ public class GuiScreenUpdater extends GuiScreen
 
         top += 19;
 
-        drawRect(left, right, top, bottom, 0F, 0F, 0F, alpha);
+        drawRect(left, right, top, bottom, 0F, 0F, 0F, alpha); // TODO: Scroll
         String selectedVersion = versionSelector.getSelected();
         String[] changeLog = inFocus.getChangeLogForVersion(selectedVersion);
 
@@ -194,7 +219,7 @@ public class GuiScreenUpdater extends GuiScreen
         if (isMouseInBounds(mouseX, mouseY, 10, 120, 0, height))
         {
             System.out.println("Click in list");
-        } else versionSelector.mouseDown(mouseX, mouseY, mouseButton);
+        } else versionSelector.mouseDown();
     }
 
     private boolean isMouseInBounds(int mouseX, int mouseY, int left, int right, int top, int bottom)
@@ -231,7 +256,6 @@ public class GuiScreenUpdater extends GuiScreen
 
         tessellator.draw();
 
-//        glColor4f(1, 1, 1, 1);
         glShadeModel(GL_FLAT);
         glEnable(GL_TEXTURE_2D);
         glEnable(GL_CULL_FACE);
@@ -249,7 +273,7 @@ public class GuiScreenUpdater extends GuiScreen
 
         public void draw()
         {
-            drawRect(_entryPadding, 110 - _entryPadding, 0, _listEntryHeight, 0F, 0F, 0F);
+            drawRect(_entryPadding, 110 - _entryPadding, 0, _listEntryHeight, 0F, 0F, 0F, 0.5F);
             mc.fontRenderer.drawString(mod.getDisplayName(), _entryPadding, 0, 0xFFFFFF, true);
         }
     }
@@ -257,19 +281,124 @@ public class GuiScreenUpdater extends GuiScreen
     private class DropDown
     {
         Entry[] entries;
-        int selected;
+        int selected, hovering = -1;
         boolean expanded = false;
+        int width, height;
+        int scrollOffset = 0;
 
-        boolean needsScroll = false;
+        public DropDown(UpdatingMod mod)
+        {
+            String[] versionIds = mod.getVersionIds();
+            String[] display = mod.getVersionsForDisplay();
+            entries = new Entry[versionIds.length];
+            for (int i = 0; i < versionIds.length; i++)
+                entries[i] = new Entry(versionIds[i], display[i]);
+        }
+
+        public void draw(int left, int right, int top, int bottom, int mouseX, int mouseY)
+        {
+            if (width == 0) this.calcWidth();
+
+            GL11.glPushMatrix();
+            int entryHeight = 20;
+            int entriesToDraw = expanded ? (bottom - top) / entryHeight : 1;
+            height = entriesToDraw * entryHeight;
+            int y = bottom - height;
+            GL11.glTranslatef(left, y, 1);
+            mouseY -= y;
+            mouseX -= left;
+            Entry[] drawing = expanded ?
+                    ArrayUtils.subarray(entries, scrollOffset, Math.min(entries.length, scrollOffset + entriesToDraw)) :
+                    new Entry[]{entries[selected]};
+            int listIndex = scrollOffset;
+            hovering = -1;
+            for (int i = 0; i < drawing.length; i++)
+            {
+                Entry entry = drawing[i];
+                GL11.glPushMatrix();
+                GL11.glTranslatef(0, i * entryHeight, 0);
+                String text = entry.name;
+                boolean more = expanded && ((i == 0 && listIndex > 0) ||
+                        (i == drawing.length - 1 && listIndex != entries.length - 1));
+                if (more) text = "More";
+                boolean hover = isMouseInBounds(mouseX, mouseY, 0, width, 0, entryHeight);
+                if (hover) hovering = listIndex;
+                drawEntry(text, hover, more);
+                mouseY -= entryHeight;
+                GL11.glPopMatrix();
+                listIndex++;
+            }
+            GL11.glPopMatrix();
+        }
+
+        private void calcWidth()
+        {
+            for (Entry entry : entries) width = Math.max(width, mc.fontRenderer.getStringWidth(entry.name) + 8);
+        }
+
+        private void drawEntry(String text, boolean hover, boolean centerText)
+        {
+            float[] color = hover ?
+                    new float[]{0F, 0F, 1F, expanded ? 0.75F : 0.5F} :
+                    new float[]{0F, 0F, 0F, expanded ? 0.75F : 0.5F};
+            drawRect(0, width, 0, 20, color);
+            int tY = 20 / 2 - (mc.fontRenderer.FONT_HEIGHT / 2);
+            if (centerText)
+                drawCenteredSplitString(text, (width / 2), tY, width, 0xFFFFFF, true);
+            else mc.fontRenderer.drawString(text, 4, tY, 0xFFFFFF, true);
+        }
+
+        public int getWidth()
+        {
+            return width;
+        }
+
+        public String getSelected()
+        {
+            return entries[selected].id;
+        }
+
+        public void mouseDown()
+        {
+            int entryHeight = 20;
+            if (expanded)
+            {
+                int onScreen = height / entryHeight;
+                if (hovering == -1) expanded = false;
+                else if (scrollOffset > 0 && hovering == scrollOffset) this.scrollUp();
+                else if (scrollOffset < entries.length - onScreen && hovering == onScreen - 1 + scrollOffset)
+                    this.scrollDown();
+                else
+                {
+                    selected = hovering;
+                    expanded = false;
+                }
+            } else if (hovering != -1) expanded = true;
+        }
+
+        private void scrollDown()
+        {
+            this.scrollOffset = Math.min(scrollOffset + 2, entries.length - (height / 20));
+        }
+
+        private void scrollUp()
+        {
+            this.scrollOffset = Math.max(scrollOffset - 2, 0);
+        }
+
+        /*boolean needsScroll = false;
         int scrollOffset = 0;
         int scrollHides = 0;
         boolean bottomHover = false;
         boolean topHover = false;
         int hovering = -1;
+        int width = 0;
 
         public DropDown(Entry... entries)
         {
+//            this.entries = entries;
             this.entries = entries;
+            ArrayUtils.reverse(this.entries);
             selected = 0;
         }
 
@@ -280,7 +409,14 @@ public class GuiScreenUpdater extends GuiScreen
             entries = new Entry[versionIds.length];
             for (int i = 0; i < versionIds.length; i++)
                 entries[i] = new Entry(versionIds[i], display[i]);
-            selected = 0;
+            ArrayUtils.reverse(this.entries);
+            selected = entries.length - 1;
+            scrollHides = selected;
+        }
+
+        public int getWidth()
+        {
+            return width;
         }
 
         public void mouseDown(int mouseX, int mouseY, int mouseButton)
@@ -303,11 +439,14 @@ public class GuiScreenUpdater extends GuiScreen
             } else expanded = false;
         }
 
-        public void draw(int bLeft, int bRight, int bTop, int bBottom, int x, int y, boolean center, int mouseX, int mouseY)
+        public void draw(int bLeft, int bRight, int bTop, int bBottom, int baseHeight, int y, boolean center, int mouseX, int mouseY)
         {
+            System.out.println(scrollOffset+", "+scrollHides);
+
 //            mc.fontRendererObj.drawString(selected.name, 0, 0, 0xFFFFFF, true);
             glPushMatrix();
             glTranslatef(0, 0, 1);
+            mouseX -= bLeft;
 //            int bX = x;
 //            int textWidth = mc.fontRendererObj.getStringWidth(selected.name);
 //            if (center) bX -= textWidth / 2;
@@ -319,21 +458,23 @@ public class GuiScreenUpdater extends GuiScreen
 
             FontRenderer fR = mc.fontRenderer;
 
-//            if (expanded)
-//            {
-            int width = fR.getStringWidth(entries[0].name) + fR.FONT_HEIGHT;
-
-            if (expanded)
+            if (width == 0)
                 for (Entry entry : entries) width = Math.max(width, fR.getStringWidth(entry.name) + fR.FONT_HEIGHT);
 
-            int height = 2 * fR.FONT_HEIGHT;
-            if (expanded) height *= entries.length;
+//            if (expanded)
+//            {
+//            int width = fR.getStringWidth(entries[0].name) + fR.FONT_HEIGHT;
 
-            int bottom = Math.min(y + height, bBottom);
-            int yOffset = bottom - height + (fR.FONT_HEIGHT / 2);
+//            if (expanded)
+//                for (Entry entry : entries) width = Math.max(width, fR.getStringWidth(entry.name) + fR.FONT_HEIGHT);
+            int entryHeight = baseHeight;
+            int height = entryHeight;//2 * fR.FONT_HEIGHT;
+//            if (expanded) height *= entries.length;
+
+            int yOffset = bBottom - height + (fR.FONT_HEIGHT / 2);
             if (yOffset < bTop)
             {
-                yOffset = bTop;
+                yOffset = bBottom - height;
             }
             hovering = -1;
             int listIndex = scrollOffset, renderIndex = 0;
@@ -342,9 +483,9 @@ public class GuiScreenUpdater extends GuiScreen
                 while (listIndex < entries.length)
                 {
                     Entry entry = entries[listIndex];
-                    int tY = yOffset - (fR.FONT_HEIGHT / 2);
-                    boolean nextExceedsHeight = (yOffset + (2 * (1.5 * fR.FONT_HEIGHT))) > bBottom;
-                    boolean hover = isMouseInBounds(mouseX, mouseY, x, x + width, tY, tY + (2 * fR.FONT_HEIGHT));
+                    int tY = yOffset;
+                    boolean nextExceedsHeight = yOffset - entryHeight < bTop(yOffset + (2 * (1.5 * fR.FONT_HEIGHT))) > bBottom;
+                    boolean hover = isMouseInBounds(mouseX, mouseY, bLeft, bLeft + width, tY, tY + entryHeight);
                     if (hover) hovering = listIndex;
                     boolean centerText = false;
                     String text = entry.name;
@@ -354,8 +495,8 @@ public class GuiScreenUpdater extends GuiScreen
                         centerText = true;
                         text = "More...";
                     }
-                    drawEntry(x, tY, width, hover, centerText, text);
-                    yOffset += (2 * fR.FONT_HEIGHT);
+                    drawEntry(bLeft, tY, width, hover, centerText, text);
+                    yOffset -= entryHeight;
 
                     if (!expanded) break;
                     if (nextExceedsHeight)
@@ -370,13 +511,12 @@ public class GuiScreenUpdater extends GuiScreen
             else
             {
                 Entry drawing = entries[selected];
-                int tY = yOffset - (fR.FONT_HEIGHT / 2);
-                boolean hover = isMouseInBounds(mouseX, mouseY, x, x + width, tY, tY + (2 * fR.FONT_HEIGHT));
+                boolean hover = isMouseInBounds(mouseX, mouseY, bLeft, bLeft + width, yOffset, yOffset + height);
                 if (hover) hovering = selected;
-                drawEntry(x, tY, width, hover, false, drawing.name);
+                drawEntry(bLeft, yOffset, width, hover, false, drawing.name);
             }
 
-            /*for (int i = scrollOffset, j = 0; i < entries.length; i++)
+            for (int i = scrollOffset, j = 0; i < entries.length; i++)
             {
                 Entry entry = entries[i];
                 int tY = yOffset - (fR.FONT_HEIGHT / 2);
@@ -400,7 +540,7 @@ public class GuiScreenUpdater extends GuiScreen
                     break;
                 }
                 j++;
-            }*/
+            }
             glPopMatrix();
         }
 
@@ -409,17 +549,18 @@ public class GuiScreenUpdater extends GuiScreen
             float[] color = hover ?
                     new float[]{0F, 0F, 1F, expanded ? 0.75F : 0.5F} :
                     new float[]{0F, 0F, 0F, expanded ? 0.75F : 0.5F};
-            drawRect(x, x + width, y, y + (2 * mc.fontRenderer.FONT_HEIGHT), color);
-            int tY = (mc.fontRenderer.FONT_HEIGHT / 2);
+            drawRect(x, x + width, y, y + 20(2 * mc.fontRenderer.FONT_HEIGHT), color);
+            int tY = 20 / 2 - (mc.fontRenderer.FONT_HEIGHT / 2);
             if (centerText)
                 drawCenteredSplitString(text, x + (width / 2), y + tY, width, 0xFFFFFF, true);
-            else mc.fontRenderer.drawString(text, x + tY, y + tY, 0xFFFFFF, true);
+            else mc.fontRenderer.drawString(text, x + 4, y + tY, 0xFFFFFF, true);
         }
 
         public String getSelected()
         {
             return entries[selected].id;
         }
+    */
     }
 
     private class Entry
